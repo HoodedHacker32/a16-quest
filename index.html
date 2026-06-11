@@ -216,6 +216,10 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 .sheet.on{transform:translateY(0)}
 .sheet.dragging{transition:none}
 .sheet .grab{width:42px;height:4px;border-radius:4px;background:rgba(255,255,255,.16);margin:4px auto 16px}
+.sheet-x{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:11px;border:1px solid var(--card-border);
+  background:rgba(255,255,255,.05);color:var(--txt-dim);display:grid;place-items:center;cursor:pointer;transition:all .2s}
+.sheet-x:hover{color:var(--txt);border-color:rgba(255,255,255,.2)}
+.sheet-x:active{transform:scale(.9)}
 .sheet h2{font-family:var(--font-d);font-size:17px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;text-align:center}
 .seg{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--card-border);border-radius:13px;padding:4px;margin-bottom:16px}
 .seg button{flex:1;padding:10px;border:none;border-radius:10px;background:transparent;color:var(--txt-dim);
@@ -498,6 +502,9 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 <div class="sheet-veil" id="veil-dep"></div>
 <div class="sheet" id="sheet-dep">
   <div class="grab"></div>
+  <button class="sheet-x" id="dep-x" aria-label="Close">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m18 6-12 12M6 6l12 12"/></svg>
+  </button>
   <h2 id="dep-title">Log a deposit</h2>
   <div class="seg">
     <button id="seg-in" class="on">+ Save</button>
@@ -515,6 +522,9 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 <div class="sheet-veil" id="veil-set"></div>
 <div class="sheet" id="sheet-set">
   <div class="grab"></div>
+  <button class="sheet-x" id="set-x" aria-label="Close">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m18 6-12 12M6 6l12 12"/></svg>
+  </button>
   <h2>Settings</h2>
   <div class="set-group">
     <div class="set-row">
@@ -851,8 +861,20 @@ function lockBody(on){
   }
 }
 function sheet(name,open){$('sheet-'+name).classList.toggle('on',open);$('veil-'+name).classList.toggle('on',open);lockBody(open);if(open)buzz(8);}
-$('veil-dep').onclick=()=>sheet('dep',false);
-$('veil-set').onclick=()=>sheet('set',false);
+/* veils are inert blockers: no click-through, no dismiss, no scroll bleed */
+['dep','set'].forEach(n=>{
+  const v=$('veil-'+n);
+  v.onclick=e=>{e.preventDefault();e.stopPropagation();};
+  v.addEventListener('touchstart',e=>{if(e.cancelable)e.preventDefault();},{passive:false});
+  v.addEventListener('touchmove',e=>{if(e.cancelable)e.preventDefault();},{passive:false});
+});
+$('dep-x').onclick=()=>sheet('dep',false);
+$('set-x').onclick=()=>sheet('set',false);
+addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if($('sheet-dep').classList.contains('on'))sheet('dep',false);
+  if($('sheet-set').classList.contains('on'))sheet('set',false);
+});
 
 /* drag-to-dismiss bottom sheets (mobile only — desktop uses centred modals) */
 function makeDraggable(name){

@@ -1,4 +1,4 @@
-const CACHE = 'a16-quest-v1';
+const CACHE = 'a16-quest-v2';
 const ASSETS = ['./', './index.html', './icon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
