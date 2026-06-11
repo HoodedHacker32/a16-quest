@@ -205,13 +205,14 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 .fab[hidden]{display:none}
 
 /* sheets */
-.sheet-veil{position:fixed;inset:0;z-index:50;background:rgba(5,5,10,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .3s}
+.sheet-veil{position:fixed;inset:0;z-index:50;background:rgba(5,5,10,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .3s;touch-action:none}
 .sheet-veil.on{opacity:1;pointer-events:auto}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;max-width:520px;margin:0 auto;
   background:linear-gradient(180deg,#16161f,#101018);border:1px solid var(--card-border);border-bottom:none;
   border-radius:26px 26px 0 0;padding:10px 20px calc(22px + var(--sab));
   transform:translateY(105%);transition:transform .45s cubic-bezier(.32,1.25,.4,1);
-  box-shadow:0 -18px 60px rgba(0,0,0,.55)}
+  box-shadow:0 -18px 60px rgba(0,0,0,.55);
+  touch-action:none;will-change:transform}
 .sheet.on{transform:translateY(0)}
 .sheet.dragging{transition:none}
 .sheet .grab{width:42px;height:4px;border-radius:4px;background:rgba(255,255,255,.16);margin:4px auto 16px}
@@ -290,7 +291,8 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
   .sheet{left:50%;right:auto;bottom:auto;top:50%;width:460px;max-width:92vw;margin:0;
     border-radius:24px;border-bottom:1px solid var(--card-border);padding-bottom:24px;
     transform:translate(-50%,-46%) scale(.96);opacity:0;pointer-events:none;
-    transition:transform .35s cubic-bezier(.22,1.2,.36,1),opacity .25s}
+    transition:transform .35s cubic-bezier(.22,1.2,.36,1),opacity .25s;
+    touch-action:auto;will-change:auto}
   .sheet.on{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
   .sheet .grab{display:none}
   /* roomier lock screen */
@@ -836,7 +838,19 @@ function fxStep(){
 }
 
 /* ===== sheets ===== */
-function sheet(name,open){$('sheet-'+name).classList.toggle('on',open);$('veil-'+name).classList.toggle('on',open);if(open)buzz(8);}
+/* body scroll lock — position:fixed technique, the only one iOS respects */
+let scrollLockY=0;
+function lockBody(on){
+  const b=document.body.style;
+  if(on){
+    scrollLockY=scrollY;
+    b.position='fixed';b.top=(-scrollLockY)+'px';b.left='0';b.right='0';b.width='100%';
+  }else if(document.body.style.position==='fixed'){
+    b.position='';b.top='';b.left='';b.right='';b.width='';
+    scrollTo({top:scrollLockY,behavior:'instant'});
+  }
+}
+function sheet(name,open){$('sheet-'+name).classList.toggle('on',open);$('veil-'+name).classList.toggle('on',open);lockBody(open);if(open)buzz(8);}
 $('veil-dep').onclick=()=>sheet('dep',false);
 $('veil-set').onclick=()=>sheet('set',false);
 
@@ -844,6 +858,11 @@ $('veil-set').onclick=()=>sheet('set',false);
 function makeDraggable(name){
   const el=$('sheet-'+name);
   let startY=0,lastY=0,lastT=0,vel=0,active=false,dragging=false;
+  let raf=0,pendingY=null;
+  const applyFrame=()=>{
+    raf=0;
+    if(pendingY!==null)el.style.transform=`translate3d(0,${pendingY}px,0)`;
+  };
   el.addEventListener('touchstart',e=>{
     if(matchMedia('(min-width:980px)').matches)return;
     active=true;dragging=false;
@@ -858,20 +877,23 @@ function makeDraggable(name){
       if(Math.abs(dy)<=8)return; /* let taps through */
       dragging=true;el.classList.add('dragging');
     }
-    e.preventDefault();
-    /* follow the finger down; rubber-band when pulled up */
-    el.style.transform=`translateY(${dy>0?dy:dy*0.15}px)`;
+    if(e.cancelable)e.preventDefault();
+    /* follow the finger down; rubber-band when pulled up.
+       Batched to one transform per frame for smooth compositing. */
+    pendingY=dy>0?dy:dy*0.15;
+    if(!raf)raf=requestAnimationFrame(applyFrame);
   },{passive:false});
   const end=()=>{
     if(!active)return;
     active=false;
     if(!dragging)return;
     dragging=false;el.classList.remove('dragging');
+    if(raf){cancelAnimationFrame(raf);raf=0;}
+    pendingY=null;
     const dy=lastY-startY;
     if(dy>120||(dy>30&&vel>0.55)){
       /* dismiss: transition from the dragged position down and out */
-      $('veil-'+name).classList.remove('on');
-      el.classList.remove('on');
+      sheet(name,false);
       requestAnimationFrame(()=>{el.style.transform='';});
       buzz(8);
     }else{
