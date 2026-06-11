@@ -489,6 +489,37 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 
 <div class="toast" id="toast"></div>
 
+<!-- sync setup overlay -->
+<div class="goal-flash" id="syncSetup" style="z-index:65">
+  <div style="max-width:340px;width:100%">
+    <div style="width:56px;height:56px;margin:0 auto 18px;border-radius:18px;background:linear-gradient(135deg,rgba(255,122,26,.25),rgba(255,122,26,.08));border:1px solid rgba(255,122,26,.4);display:grid;place-items:center;color:var(--orange-2)">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 16v-4m0-4h.01"/></svg>
+    </div>
+    <div class="big" style="font-size:clamp(20px,5vw,28px);margin-bottom:10px">Link GitHub Sync</div>
+    <p id="syncSetupMsg" style="font-size:14px;margin-bottom:22px">Paste a GitHub token to enable cloud sync across devices.</p>
+
+    <div style="text-align:left;background:rgba(255,255,255,.04);border:1px solid var(--card-border);border-radius:16px;padding:16px 18px;margin-bottom:18px;font-size:13px;line-height:1.7;color:var(--txt-dim)">
+      <div style="color:var(--txt);font-family:var(--font-d);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">3 steps &mdash; takes 30 seconds</div>
+      <div><span style="color:var(--orange-2);font-family:var(--font-m);margin-right:8px">01</span>Click the link below &rarr; GitHub opens</div>
+      <div style="margin-top:4px"><span style="color:var(--orange-2);font-family:var(--font-m);margin-right:8px">02</span>Scroll down &rarr; click <strong style="color:var(--txt)">"Generate token"</strong></div>
+      <div style="margin-top:4px"><span style="color:var(--orange-2);font-family:var(--font-m);margin-right:8px">03</span>Copy the token &rarr; paste below</div>
+    </div>
+
+    <a href="https://github.com/settings/tokens/new?scopes=gist&description=a16-quest-sync" target="_blank" rel="noopener"
+      style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:13px;border:1px solid rgba(255,122,26,.4);background:rgba(255,122,26,.08);color:var(--orange-2);font-family:var(--font-d);font-size:13px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;margin-bottom:14px;transition:all .2s">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      Open GitHub Token Page
+    </a>
+
+    <div class="field" style="max-width:none;margin-bottom:12px">
+      <label>Paste your token here</label>
+      <input type="password" id="syncToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" style="font-family:var(--font-m);font-size:14px">
+    </div>
+    <button class="btn btn-primary" id="syncSaveToken" style="max-width:none">Save &amp; Enable Sync</button>
+    <button class="btn btn-ghost" id="syncSkip" style="width:100%;margin-top:6px">Skip for now (offline only)</button>
+  </div>
+</div>
+
 <div class="goal-flash" id="goalFlash">
   <div>
     <div class="trophy-ic">
@@ -508,40 +539,55 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 </div>
 
 <script>
-/* ===== crypto ===== */
-const BLOB_URL='https://jsonblob.com/api/jsonBlob/019eb6bb-74b7-7898-9f74-dd7c46aa9b77';
+/* ===== crypto + storage ===== */
+const GIST_ID='ef903717a61f355902326bb539d3f36e';
+const GIST_FILE='vault_init.json';
+const GIST_RAW=`https://gist.githubusercontent.com/HoodedHacker32/${GIST_ID}/raw/${GIST_FILE}`;
+const GIST_API=`https://api.github.com/gists/${GIST_ID}`;
 const CACHE_KEY='a16.cache.v2';
+const TOKEN_KEY='a16.ghtoken';
 const ITER=310000;
 const te=new TextEncoder(),td=new TextDecoder();
 const b64e=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let KEY=null,S=null,SALT=null;
 
+function getWriteToken(){return localStorage.getItem(TOKEN_KEY);}
+function saveWriteToken(t){localStorage.setItem(TOKEN_KEY,t.trim());}
+
 async function deriveKey(pw,salt){
   const km=await crypto.subtle.importKey('raw',te.encode(pw),'PBKDF2',false,['deriveKey']);
   return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITER,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
 }
 
-async function fetchBlob(){
-  const r=await fetch(BLOB_URL,{cache:'no-store'});
+async function fetchVault(){
+  const r=await fetch(`${GIST_RAW}?_=${Date.now()}`,{cache:'no-store'});
   if(!r.ok)throw new Error('fetch_failed');
-  const j=await r.json();
+  const text=await r.text();
+  const j=JSON.parse(text.replace(/^﻿/,'')); // strip BOM
   localStorage.setItem(CACHE_KEY,JSON.stringify(j));
   return j;
 }
 
-async function pushBlob(blob){
+async function pushVault(blob){
+  const token=getWriteToken();
+  if(!token){setSyncStatus('offline');return;}
   setSyncStatus('syncing');
   try{
-    const r=await fetch(BLOB_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(blob)});
-    if(!r.ok)throw new Error('push_failed');
+    const r=await fetch(GIST_API,{
+      method:'PATCH',
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},
+      body:JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(blob)}}})
+    });
+    if(r.status===401){setSyncStatus('offline');showSyncSetup(true);return;}
+    if(!r.ok)throw new Error(`push_failed:${r.status}`);
     setSyncStatus('synced');
-  }catch(e){setSyncStatus('offline');toast('Saved locally — sync when online','warn');}
+  }catch(e){setSyncStatus('offline');toast('Saved locally — sync token needed','warn');}
 }
 
 async function unlockVault(pw){
   let blob;
-  try{blob=await fetchBlob();}
+  try{blob=await fetchVault();}
   catch(e){
     const c=localStorage.getItem(CACHE_KEY);
     if(!c)throw new Error('offline_no_cache');
@@ -550,7 +596,7 @@ async function unlockVault(pw){
   }
 
   if(!blob.ct){
-    /* first use ever */
+    /* first use ever — vault empty in gist */
     SALT=crypto.getRandomValues(new Uint8Array(16));
     KEY=await deriveKey(pw,SALT);
     S={goal:1299,created:Date.now(),deposits:[]};
@@ -570,8 +616,14 @@ async function persist(){
   const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,te.encode(JSON.stringify(S)));
   const blob={v:1,salt:b64e(SALT),iv:b64e(iv),ct:b64e(ct)};
   localStorage.setItem(CACHE_KEY,JSON.stringify(blob));
-  pushBlob(blob);
+  pushVault(blob);
 }
+
+function showSyncSetup(tokenBad=false){
+  $('syncSetup').classList.add('on');
+  $('syncSetupMsg').textContent=tokenBad?'The saved token was rejected. Generate a new one below.':'Paste a GitHub token to enable cloud sync across devices.';
+}
+function hideSyncSetup(){$('syncSetup').classList.remove('on');}
 
 /* ===== helpers ===== */
 const $=id=>document.getElementById(id);
@@ -712,6 +764,17 @@ $('dep-save').onclick=async()=>{
 };
 $('goalClose').onclick=()=>$('goalFlash').classList.remove('on');
 
+/* sync setup overlay */
+$('syncSaveToken').onclick=async()=>{
+  const t=$('syncToken').value.trim();
+  if(!t){toast('Paste a token first','warn');return;}
+  saveWriteToken(t);hideSyncSetup();
+  toast('Sync enabled','ok');buzz(15);
+  /* trigger a write immediately to verify */
+  await persist();
+};
+$('syncSkip').onclick=hideSyncSetup;
+
 $('btn-settings').onclick=()=>{$('set-goal').value=S.goal;sheet('set',true);};
 $('set-done').onclick=async()=>{
   const g=parseAmt($('set-goal').value);
@@ -753,10 +816,12 @@ $('lock-form').onsubmit=async(e)=>{
     btn.textContent='Press Start';btn.disabled=false;
     show('scr-app');render(true);buzz(15);
     if(S.deposits.length===0)confetti(140);
+    /* prompt for sync token on first device use */
+    if(!getWriteToken())setTimeout(()=>showSyncSetup(),1200);
   }catch(ex){
     btn.textContent='Press Start';btn.disabled=false;
     $('bootLine').innerHTML='VAULT.SYS &mdash; <span class="ok">ENCRYPTED</span>';
-    if(ex.message==='offline_no_cache')err('lk-err','No connection and no local cache found.');
+    if(ex.message==='offline_no_cache')err('lk-err','No connection and no local cache found. Try again with internet access.');
     else err('lk-err','Access denied — wrong password.');
     $('lk-pw').select();
   }
