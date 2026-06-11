@@ -586,6 +586,7 @@ const GIST_RAW=`https://gist.githubusercontent.com/HoodedHacker32/${GIST_ID}/raw
 const GIST_API=`https://api.github.com/gists/${GIST_ID}`;
 const CACHE_KEY='a16.cache.v2';
 const TOKEN_KEY='a16.ghtoken';
+const SESS_KEY='a16.sess';
 const ITER=310000;
 const te=new TextEncoder(),td=new TextDecoder();
 const b64e=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
@@ -597,7 +598,42 @@ function saveWriteToken(t){localStorage.setItem(TOKEN_KEY,t.trim());}
 
 async function deriveKey(pw,salt){
   const km=await crypto.subtle.importKey('raw',te.encode(pw),'PBKDF2',false,['deriveKey']);
-  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITER,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:ITER,hash:'SHA-256'},km,{name:'AES-GCM',length:256},true,['encrypt','decrypt']);
+}
+
+/* session cache: the derived AES key (not the password) is kept in
+   localStorage so reloads skip the password prompt. Cleared on Lock. */
+async function cacheSession(){
+  try{
+    const raw=await crypto.subtle.exportKey('raw',KEY);
+    localStorage.setItem(SESS_KEY,b64e(raw));
+  }catch(e){}
+}
+async function resumeSession(){
+  const raw=localStorage.getItem(SESS_KEY);
+  if(!raw)return false;
+  let blob;
+  try{blob=await fetchVault();}
+  catch(e){
+    const c=localStorage.getItem(CACHE_KEY);
+    if(!c)return false;
+    blob=JSON.parse(c);
+    setSyncStatus('offline');
+  }
+  if(!blob.ct)return false;
+  try{
+    const key=await crypto.subtle.importKey('raw',b64d(raw),'AES-GCM',true,['encrypt','decrypt']);
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(blob.iv)},key,b64d(blob.ct));
+    KEY=key;SALT=b64d(blob.salt);S=JSON.parse(td.decode(pt));
+    if(blob.tok){
+      try{const tpt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(blob.tok.iv)},key,b64d(blob.tok.ct));saveWriteToken(td.decode(tpt));}catch(e){}
+    }
+    return true;
+  }catch(e){
+    /* password was changed elsewhere (salt rotated) — stale key, back to lock */
+    localStorage.removeItem(SESS_KEY);
+    return false;
+  }
 }
 
 async function fetchVault(){
@@ -847,6 +883,7 @@ $('set-pw').onclick=async()=>{
   const nw2=prompt('Confirm new password:');if(nw!==nw2){toast("Passwords didn't match",'warn');return;}
   SALT=crypto.getRandomValues(new Uint8Array(16));
   KEY=await deriveKey(nw,SALT);
+  cacheSession();
   await persist();toast('Password changed for all devices','ok');sheet('set',false);
 };
 $('set-wipe').onclick=async()=>{
@@ -855,10 +892,11 @@ $('set-wipe').onclick=async()=>{
   S={goal:S.goal,created:Date.now(),deposits:[]};
   SALT=crypto.getRandomValues(new Uint8Array(16));
   KEY=await deriveKey(prompt('Re-enter your password to confirm wipe:'),SALT);
+  cacheSession();
   await persist();render();toast('Vault wiped','warn');sheet('set',false);
 };
 
-$('btn-lock').onclick=()=>{KEY=null;S=null;SALT=null;prevPct=0;prevSaved=0;$('lk-pw').value='';show('scr-lock');buzz(10);toast('Vault locked','lock');};
+$('btn-lock').onclick=()=>{KEY=null;S=null;SALT=null;prevPct=0;prevSaved=0;localStorage.removeItem(SESS_KEY);$('lk-pw').value='';show('scr-lock');buzz(10);toast('Vault locked','lock');};
 
 /* ===== lock flow ===== */
 $('lock-form').onsubmit=async(e)=>{
@@ -868,6 +906,7 @@ $('lock-form').onsubmit=async(e)=>{
   await new Promise(r=>setTimeout(r,30));
   try{
     await unlockVault($('lk-pw').value);
+    cacheSession();
     $('lk-err').classList.remove('show');
     btn.textContent='Press Start';btn.disabled=false;
     show('scr-app');render(true);buzz(15);
@@ -889,6 +928,21 @@ if(!window.isSecureContext||!crypto.subtle){
 }else{
   show('scr-lock');
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  /* auto-resume if a session key is cached (cleared by the Lock button) */
+  (async()=>{
+    if(!localStorage.getItem(SESS_KEY))return;
+    const btn=$('lk-btn');
+    btn.disabled=true;
+    $('bootLine').innerHTML='VAULT.SYS &mdash; <span class="warn">RESTORING SESSION&hellip;</span>';
+    const ok=await resumeSession();
+    btn.disabled=false;
+    if(ok){
+      show('scr-app');render(true);
+      if(!getWriteToken())setTimeout(()=>showSyncSetup(),1200);
+    }else{
+      $('bootLine').innerHTML='VAULT.SYS &mdash; <span class="ok">ENCRYPTED</span>';
+    }
+  })();
 }
 </script>
 </body>
