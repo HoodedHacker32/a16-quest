@@ -1,13 +1,18 @@
 {
   "name": "A16 Quest — Savings Vault",
   "short_name": "A16 Quest",
-  "description": "Encrypted savings tracker — Road to the GIGABYTE A16",
+  "description": "Encrypted savings tracker — Road to the GIGABYTE A16 RTX 5050",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
+  "categories": ["finance", "utilities"],
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
-  ]
+    { "src": "icon.svg",     "sizes": "any",     "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png",     "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png",     "purpose": "any maskable" }
+  ],
+  "screenshots": []
 }
