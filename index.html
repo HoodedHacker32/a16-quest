@@ -213,6 +213,7 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
   transform:translateY(105%);transition:transform .45s cubic-bezier(.32,1.25,.4,1);
   box-shadow:0 -18px 60px rgba(0,0,0,.55)}
 .sheet.on{transform:translateY(0)}
+.sheet.dragging{transition:none}
 .sheet .grab{width:42px;height:4px;border-radius:4px;background:rgba(255,255,255,.16);margin:4px auto 16px}
 .sheet h2{font-family:var(--font-d);font-size:17px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;text-align:center}
 .seg{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--card-border);border-radius:13px;padding:4px;margin-bottom:16px}
@@ -838,6 +839,50 @@ function fxStep(){
 function sheet(name,open){$('sheet-'+name).classList.toggle('on',open);$('veil-'+name).classList.toggle('on',open);if(open)buzz(8);}
 $('veil-dep').onclick=()=>sheet('dep',false);
 $('veil-set').onclick=()=>sheet('set',false);
+
+/* drag-to-dismiss bottom sheets (mobile only — desktop uses centred modals) */
+function makeDraggable(name){
+  const el=$('sheet-'+name);
+  let startY=0,lastY=0,lastT=0,vel=0,active=false,dragging=false;
+  el.addEventListener('touchstart',e=>{
+    if(matchMedia('(min-width:980px)').matches)return;
+    active=true;dragging=false;
+    startY=lastY=e.touches[0].clientY;lastT=e.timeStamp;vel=0;
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(!active)return;
+    const y=e.touches[0].clientY,dy=y-startY,dt=e.timeStamp-lastT;
+    if(dt>0)vel=(y-lastY)/dt;
+    lastY=y;lastT=e.timeStamp;
+    if(!dragging){
+      if(Math.abs(dy)<=8)return; /* let taps through */
+      dragging=true;el.classList.add('dragging');
+    }
+    e.preventDefault();
+    /* follow the finger down; rubber-band when pulled up */
+    el.style.transform=`translateY(${dy>0?dy:dy*0.15}px)`;
+  },{passive:false});
+  const end=()=>{
+    if(!active)return;
+    active=false;
+    if(!dragging)return;
+    dragging=false;el.classList.remove('dragging');
+    const dy=lastY-startY;
+    if(dy>120||(dy>30&&vel>0.55)){
+      /* dismiss: transition from the dragged position down and out */
+      $('veil-'+name).classList.remove('on');
+      el.classList.remove('on');
+      requestAnimationFrame(()=>{el.style.transform='';});
+      buzz(8);
+    }else{
+      el.style.transform=''; /* snap back to open */
+    }
+  };
+  el.addEventListener('touchend',end);
+  el.addEventListener('touchcancel',end);
+}
+makeDraggable('dep');
+makeDraggable('set');
 
 let depMode=1;
 $('seg-in').onclick=()=>{depMode=1;$('seg-in').className='on';$('seg-out').className='';$('dep-title').textContent='Log a deposit';buzz(8);};
