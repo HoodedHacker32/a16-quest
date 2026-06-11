@@ -262,6 +262,42 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 .goal-flash p{color:var(--txt-dim);font-size:15px;max-width:320px;margin:0 auto 26px}
 .trophy-ic{width:80px;height:80px;margin:0 auto 16px;color:var(--orange-2)}
 
+/* column wrappers are transparent on mobile */
+.col-left,.col-right{display:contents}
+
+/* ===== desktop layout ===== */
+@media(min-width:980px){
+  .screen{max-width:1160px;padding:36px 44px 60px}
+  #scr-app.on{display:grid;grid-template-columns:430px minmax(0,1fr);gap:0 28px;align-items:start;align-content:start}
+  #scr-app .app-head{grid-column:1/-1;padding-bottom:26px}
+  .col-left,.col-right{display:block;min-width:0}
+  .col-left{position:sticky;top:36px}
+  .brand img{width:42px;height:42px}
+  .brand .t1{font-size:19px}
+  .brand .t2{font-size:10px}
+  .ring-wrap{width:270px}
+  .hero{padding:34px 24px 28px}
+  .stats{grid-template-columns:repeat(4,1fr);gap:12px}
+  .miles{gap:12px}
+  .mile{padding:17px 8px 14px}
+  .mile .ic{width:42px;height:42px}
+  .specs{flex-wrap:wrap;overflow:visible;padding-bottom:14px}
+  .history{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:30px}
+  .empty{grid-column:1/-1}
+  .fab{right:44px;bottom:44px}
+  /* sheets become centred modal dialogs */
+  .sheet{left:50%;right:auto;bottom:auto;top:50%;width:460px;max-width:92vw;margin:0;
+    border-radius:24px;border-bottom:1px solid var(--card-border);padding-bottom:24px;
+    transform:translate(-50%,-46%) scale(.96);opacity:0;pointer-events:none;
+    transition:transform .35s cubic-bezier(.22,1.2,.36,1),opacity .25s}
+  .sheet.on{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+  .sheet .grab{display:none}
+  /* roomier lock screen */
+  .gate-logo{width:110px;height:110px}
+  .field{max-width:360px}
+  .btn-primary{max-width:360px}
+}
+
 @media(max-width:380px){.stats{gap:8px}.miles{gap:7px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.15ms!important}}
 </style>
@@ -311,6 +347,7 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
     </div>
   </header>
 
+  <div class="col-left">
   <div class="card hero">
     <div class="ring-wrap">
       <svg viewBox="0 0 200 200">
@@ -351,7 +388,9 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
     </div>
     <div class="bar-foot"><span id="leftAmt">&euro;0 to go</span><span id="etaShort">&mdash;</span></div>
   </div>
+  </div><!--/col-left-->
 
+  <div class="col-right">
   <div class="stats">
     <div class="card stat">
       <div class="k">
@@ -445,6 +484,7 @@ header.app-head{display:flex;align-items:center;justify-content:space-between;pa
 
   <div class="section-t">Save log</div>
   <div class="history" id="history"></div>
+  </div><!--/col-right-->
 </section>
 
 <button class="fab" id="fab" aria-label="Add deposit" hidden>
@@ -609,12 +649,28 @@ async function unlockVault(pw){
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(blob.iv)},key,b64d(blob.ct));
   KEY=key;
   S=JSON.parse(td.decode(pt));
+  /* token roaming: the sync token travels inside the encrypted blob,
+     so a correct password is enough to set up any new device */
+  if(blob.tok){
+    try{
+      const tpt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(blob.tok.iv)},key,b64d(blob.tok.ct));
+      saveWriteToken(td.decode(tpt));
+    }catch(e){/* tok encrypted under an older key — ignore, next persist refreshes it */}
+  }else if(getWriteToken()){
+    persist(); /* this device has a token the cloud lacks — publish it for the others */
+  }
 }
 
 async function persist(){
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,te.encode(JSON.stringify(S)));
   const blob={v:1,salt:b64e(SALT),iv:b64e(iv),ct:b64e(ct)};
+  const tok=getWriteToken();
+  if(tok){
+    const tiv=crypto.getRandomValues(new Uint8Array(12));
+    const tct=await crypto.subtle.encrypt({name:'AES-GCM',iv:tiv},KEY,te.encode(tok));
+    blob.tok={iv:b64e(tiv),ct:b64e(tct)};
+  }
   localStorage.setItem(CACHE_KEY,JSON.stringify(blob));
   pushVault(blob);
 }

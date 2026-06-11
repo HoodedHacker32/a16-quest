@@ -4,10 +4,12 @@ A mobile-first savings tracker for one mission: the **[GIGABYTE A16 16" Gaming L
 
 ## Security model
 
-- All savings data is encrypted **on-device** with **AES-256-GCM**.
+- All savings data is encrypted **on-device** with **AES-256-GCM** before it leaves the browser.
 - The key is derived from your password via **PBKDF2-SHA256 (310,000 iterations)** with a random salt.
-- The encrypted blob lives in your browser's `localStorage` — nothing is ever sent to a server.
+- The encrypted blob syncs through a **GitHub Gist** (reads via `gist.githubusercontent.com`, writes via the Gist API) — only ciphertext is ever stored in the cloud.
+- The gist-scoped write token also roams **inside the encrypted blob**, so a new device only needs the password — it inherits sync access on first unlock.
 - Wrong password → GCM authentication fails → access denied. No password, no data.
+- A `localStorage` copy of the (still encrypted) blob serves as the offline fallback.
 - ⚠️ There is **no recovery**. Lose the password and the vault stays locked forever.
 
 ## Features
